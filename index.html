@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>画面録画ソフト</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #f4f4f4;
+    }
+
+    button {
+      margin: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border: none;
+      background-color: #4CAF50;
+      color: white;
+      border-radius: 5px;
+    }
+
+    button:disabled {
+      background-color: #ddd;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>画面録画ソフト</h1>
+  <button id="startBtn">録画開始</button>
+  <button id="stopBtn" disabled>録画停止</button>
+  <a id="downloadLink" style="display:none;">録画した動画をダウンロード</a>
+
+  <script>
+    let mediaRecorder;
+    let recordedChunks = [];
+
+    // 録画開始
+    document.getElementById('startBtn').addEventListener('click', async () => {
+      // 画面キャプチャの取得
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: true
+        });
+
+        mediaRecorder = new MediaRecorder(stream);
+
+        // 録画データを配列に保存
+        mediaRecorder.ondataavailable = event => {
+          recordedChunks.push(event.data);
+        };
+
+        // 録画停止後の処理
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, {
+            type: 'video/webm'
+          });
+          const url = URL.createObjectURL(blob);
+          const downloadLink = document.getElementById('downloadLink');
+          downloadLink.href = url;
+          downloadLink.download = 'recorded-video.webm';
+          downloadLink.style.display = 'block';
+        };
+
+        // 録画開始
+        mediaRecorder.start();
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('stopBtn').disabled = false;
+        console.log('録画を開始しました');
+      } catch (err) {
+        console.error('画面のキャプチャに失敗しました:', err);
+      }
+    });
+
+    // 録画停止
+    document.getElementById('stopBtn').addEventListener('click', () => {
+      mediaRecorder.stop();
+      document.getElementById('stopBtn').disabled = true;
+      console.log('録画が停止しました');
+    });
+  </script>
+
+</body>
+</html>
