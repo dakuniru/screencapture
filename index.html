@@ -2,35 +2,15 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>画面＋音声録画してMP4保存</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
-      padding: 2em;
-      background: #f0f0f0;
-    }
-    button {
-      margin: 1em;
-      padding: 1em 2em;
-      font-size: 1em;
-    }
-    video {
-      width: 80%;
-      margin-top: 2em;
-      border: 2px solid #333;
-    }
-  </style>
+  <title>画面録画（高画質）</title>
 </head>
 <body>
-  <h1>🎥 画面＋音声録画ツール</h1>
+  <h1>🎥 画面録画（高画質）</h1>
   <button id="startBtn">録画開始</button>
   <button id="stopBtn" disabled>録画停止</button>
   <video id="preview" controls autoplay muted></video>
 
-  <script type="module">
-    import { createFFmpeg, fetchFile } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.4/dist/ffmpeg.min.js';
-
+  <script>
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
     const preview = document.getElementById('preview');
@@ -40,60 +20,39 @@
 
     startBtn.onclick = async () => {
       try {
-        // 画面とマイクのストリーム取得
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // 高画質で画面＋音声を取得
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            frameRate: 30, // フレームレート指定
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          },
+          audio: true
+        });
 
-        // 音声ミックス処理
-        const audioContext = new AudioContext();
-        const destination = audioContext.createMediaStreamDestination();
-
-        const screenAudio = audioContext.createMediaStreamSource(screenStream);
-        const micAudio = audioContext.createMediaStreamSource(micStream);
-
-        screenAudio.connect(destination);
-        micAudio.connect(destination);
-
-        // 映像 + 音声を合成
-        const combinedStream = new MediaStream([
-          ...screenStream.getVideoTracks(),
-          ...destination.stream.getAudioTracks()
-        ]);
-
-        preview.srcObject = combinedStream;
+        preview.srcObject = stream;
 
         recordedChunks = [];
 
-        // MediaRecorderの形式を確認して初期化
-        const options = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-          ? { mimeType: 'video/webm;codecs=vp9' }
-          : { mimeType: 'video/webm' };
+        // 高画質設定（ビットレートとコーデック）
+        const options = {
+          mimeType: 'video/webm;codecs=vp9',
+          videoBitsPerSecond: 5_000_000 // 5Mbps
+        };
 
-        mediaRecorder = new MediaRecorder(combinedStream, options);
+        mediaRecorder = new MediaRecorder(stream, options);
 
         mediaRecorder.ondataavailable = e => {
           if (e.data.size > 0) recordedChunks.push(e.data);
         };
 
-        mediaRecorder.onstop = async () => {
+        mediaRecorder.onstop = () => {
           const blob = new Blob(recordedChunks, { type: 'video/webm' });
-          const webmFile = new File([blob], 'recording.webm');
-
-          const ffmpeg = createFFmpeg({ log: true });
-          await ffmpeg.load();
-          ffmpeg.FS('writeFile', 'input.webm', await fetchFile(webmFile));
-          await ffmpeg.run('-i', 'input.webm', '-c:v', 'libx264', '-c:a', 'aac', 'output.mp4');
-          const mp4Data = ffmpeg.FS('readFile', 'output.mp4');
-
-          const mp4Blob = new Blob([mp4Data.buffer], { type: 'video/mp4' });
-          const url = URL.createObjectURL(mp4Blob);
-
+          const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = 'recording.mp4';
-          a.textContent = '📥 MP4をダウンロード';
-          a.style.display = 'block';
-          a.style.marginTop = '1em';
+          a.download = 'recording_high_quality.webm';
+          a.textContent = '📥 高画質WebMをダウンロード';
           document.body.appendChild(a);
 
           preview.srcObject = null;
@@ -101,20 +60,18 @@
         };
 
         mediaRecorder.start();
-        console.log("🎬 録画開始");
+        console.log("🎬 高画質録画開始");
         startBtn.disabled = true;
         stopBtn.disabled = false;
-
       } catch (err) {
-        console.error("🚨 録画開始エラー:", err);
-        alert("録画を開始できませんでした。権限を確認してください。");
+        console.error("🚨 エラー:", err);
+        alert("録画開始できません。画面共有の許可を確認してください。");
       }
     };
 
     stopBtn.onclick = () => {
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
-        console.log("🛑 録画停止");
         stopBtn.disabled = true;
         startBtn.disabled = false;
       }
