@@ -2,93 +2,106 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>画面録画ソフト</title>
+  <title>画面録画ができるサイト(mp4で音声対応)</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      background-color: #f4f4f4;
+      font-family: sans-serif;
+      text-align: center;
+      padding: 2em;
+      background: #f0f0f0;
     }
-
     button {
-      margin: 10px;
-      padding: 10px 20px;
-      font-size: 16px;
-      cursor: pointer;
-      border: none;
-      background-color: #4CAF50;
-      color: white;
-      border-radius: 5px;
+      margin: 1em;
+      padding: 1em 2em;
+      font-size: 1em;
     }
-
-    button:disabled {
-      background-color: #ddd;
-      cursor: not-allowed;
+    video {
+      width: 80%;
+      margin-top: 2em;
+      border: 2px solid #333;
     }
   </style>
 </head>
 <body>
-
-  <h1>画面録画ソフト</h1>
+  <h1>🎥 画面録画ができるサイト(mp4で音声対応)</h1>
   <button id="startBtn">録画開始</button>
   <button id="stopBtn" disabled>録画停止</button>
-  <a id="downloadLink" style="display:none;">録画した動画をダウンロード</a>
+  <video id="preview" controls autoplay muted></video>
 
-  <script>
+  <script type="module">
+    import { createFFmpeg, fetchFile } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.4/dist/ffmpeg.min.js';
+
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const preview = document.getElementById('preview');
+
     let mediaRecorder;
     let recordedChunks = [];
 
-    // 録画開始
-    document.getElementById('startBtn').addEventListener('click', async () => {
-      // 画面キャプチャの取得
-      try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: true
-        });
+    startBtn.onclick = async () => {
+      // 画面と音声を取得
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-        mediaRecorder = new MediaRecorder(stream);
+      // 音声をミックス（画面音声 + マイク音声）
+      const audioContext = new AudioContext();
+      const destination = audioContext.createMediaStreamDestination();
 
-        // 録画データを配列に保存
-        mediaRecorder.ondataavailable = event => {
-          recordedChunks.push(event.data);
-        };
+      const screenAudio = audioContext.createMediaStreamSource(screenStream);
+      const micAudio = audioContext.createMediaStreamSource(micStream);
 
-        // 録画停止後の処理
-        mediaRecorder.onstop = () => {
-          const blob = new Blob(recordedChunks, {
-            type: 'video/webm'
-          });
-          const url = URL.createObjectURL(blob);
-          const downloadLink = document.getElementById('downloadLink');
-          downloadLink.href = url;
-          downloadLink.download = 'recorded-video.webm';
-          downloadLink.style.display = 'block';
-        };
+      screenAudio.connect(destination);
+      micAudio.connect(destination);
 
-        // 録画開始
-        mediaRecorder.start();
-        document.getElementById('startBtn').disabled = true;
-        document.getElementById('stopBtn').disabled = false;
-        console.log('録画を開始しました');
-      } catch (err) {
-        console.error('画面のキャプチャに失敗しました:', err);
-      }
-    });
+      const combinedStream = new MediaStream([
+        ...screenStream.getVideoTracks(),
+        ...destination.stream.getAudioTracks()
+      ]);
 
-    // 録画停止
-    document.getElementById('stopBtn').addEventListener('click', () => {
+      preview.srcObject = combinedStream;
+
+      recordedChunks = [];
+      mediaRecorder = new MediaRecorder(combinedStream);
+
+      mediaRecorder.ondataavailable = e => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        const webmFile = new File([blob], 'recording.webm');
+
+        const ffmpeg = createFFmpeg({ log: true });
+        await ffmpeg.load();
+        ffmpeg.FS('writeFile', 'input.webm', await fetchFile(webmFile));
+        await ffmpeg.run('-i', 'input.webm', '-c:v', 'libx264', '-c:a', 'aac', 'output.mp4');
+        const mp4Data = ffmpeg.FS('readFile', 'output.mp4');
+
+        const mp4Blob = new Blob([mp4Data.buffer], { type: 'video/mp4' });
+        const url = URL.createObjectURL(mp4Blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'recording.mp4';
+        a.textContent = '📥 MP4をダウンロード';
+        a.style.display = 'block';
+        a.style.marginTop = '1em';
+        document.body.appendChild(a);
+
+        preview.srcObject = null;
+        preview.src = url;
+      };
+
+      mediaRecorder.start();
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+    };
+
+    stopBtn.onclick = () => {
       mediaRecorder.stop();
-      document.getElementById('stopBtn').disabled = true;
-      console.log('録画が停止しました');
-    });
+      stopBtn.disabled = true;
+      startBtn.disabled = false;
+    };
   </script>
-
 </body>
 </html>
