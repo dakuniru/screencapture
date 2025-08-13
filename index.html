@@ -23,7 +23,7 @@
         // 高画質で画面＋音声を取得
         const stream = await navigator.mediaDevices.getDisplayMedia({
           video: {
-            frameRate: 30, // フレームレート指定
+            frameRate: 60, // フレームレート指定
             width: { ideal: 1920 },
             height: { ideal: 1080 }
           },
@@ -79,3 +79,4 @@
   </script>
 </body>
 </html>
+
