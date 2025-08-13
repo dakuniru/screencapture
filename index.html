@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>画面録画ができるサイト(mp4で音声対応)</title>
+  <title>画面＋音声録画してMP4保存</title>
   <style>
     body {
       font-family: sans-serif;
@@ -23,7 +23,7 @@
   </style>
 </head>
 <body>
-  <h1>🎥 画面録画ができるサイト(mp4で音声対応)</h1>
+  <h1>🎥 画面＋音声録画ツール</h1>
   <button id="startBtn">録画開始</button>
   <button id="stopBtn" disabled>録画停止</button>
   <video id="preview" controls autoplay muted></video>
@@ -39,68 +39,85 @@
     let recordedChunks = [];
 
     startBtn.onclick = async () => {
-      // 画面と音声を取得
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-      const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      try {
+        // 画面とマイクのストリーム取得
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      // 音声をミックス（画面音声 + マイク音声）
-      const audioContext = new AudioContext();
-      const destination = audioContext.createMediaStreamDestination();
+        // 音声ミックス処理
+        const audioContext = new AudioContext();
+        const destination = audioContext.createMediaStreamDestination();
 
-      const screenAudio = audioContext.createMediaStreamSource(screenStream);
-      const micAudio = audioContext.createMediaStreamSource(micStream);
+        const screenAudio = audioContext.createMediaStreamSource(screenStream);
+        const micAudio = audioContext.createMediaStreamSource(micStream);
 
-      screenAudio.connect(destination);
-      micAudio.connect(destination);
+        screenAudio.connect(destination);
+        micAudio.connect(destination);
 
-      const combinedStream = new MediaStream([
-        ...screenStream.getVideoTracks(),
-        ...destination.stream.getAudioTracks()
-      ]);
+        // 映像 + 音声を合成
+        const combinedStream = new MediaStream([
+          ...screenStream.getVideoTracks(),
+          ...destination.stream.getAudioTracks()
+        ]);
 
-      preview.srcObject = combinedStream;
+        preview.srcObject = combinedStream;
 
-      recordedChunks = [];
-      mediaRecorder = new MediaRecorder(combinedStream);
+        recordedChunks = [];
 
-      mediaRecorder.ondataavailable = e => {
-        if (e.data.size > 0) recordedChunks.push(e.data);
-      };
+        // MediaRecorderの形式を確認して初期化
+        const options = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+          ? { mimeType: 'video/webm;codecs=vp9' }
+          : { mimeType: 'video/webm' };
 
-      mediaRecorder.onstop = async () => {
-        const blob = new Blob(recordedChunks, { type: 'video/webm' });
-        const webmFile = new File([blob], 'recording.webm');
+        mediaRecorder = new MediaRecorder(combinedStream, options);
 
-        const ffmpeg = createFFmpeg({ log: true });
-        await ffmpeg.load();
-        ffmpeg.FS('writeFile', 'input.webm', await fetchFile(webmFile));
-        await ffmpeg.run('-i', 'input.webm', '-c:v', 'libx264', '-c:a', 'aac', 'output.mp4');
-        const mp4Data = ffmpeg.FS('readFile', 'output.mp4');
+        mediaRecorder.ondataavailable = e => {
+          if (e.data.size > 0) recordedChunks.push(e.data);
+        };
 
-        const mp4Blob = new Blob([mp4Data.buffer], { type: 'video/mp4' });
-        const url = URL.createObjectURL(mp4Blob);
+        mediaRecorder.onstop = async () => {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const webmFile = new File([blob], 'recording.webm');
 
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'recording.mp4';
-        a.textContent = '📥 MP4をダウンロード';
-        a.style.display = 'block';
-        a.style.marginTop = '1em';
-        document.body.appendChild(a);
+          const ffmpeg = createFFmpeg({ log: true });
+          await ffmpeg.load();
+          ffmpeg.FS('writeFile', 'input.webm', await fetchFile(webmFile));
+          await ffmpeg.run('-i', 'input.webm', '-c:v', 'libx264', '-c:a', 'aac', 'output.mp4');
+          const mp4Data = ffmpeg.FS('readFile', 'output.mp4');
 
-        preview.srcObject = null;
-        preview.src = url;
-      };
+          const mp4Blob = new Blob([mp4Data.buffer], { type: 'video/mp4' });
+          const url = URL.createObjectURL(mp4Blob);
 
-      mediaRecorder.start();
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'recording.mp4';
+          a.textContent = '📥 MP4をダウンロード';
+          a.style.display = 'block';
+          a.style.marginTop = '1em';
+          document.body.appendChild(a);
+
+          preview.srcObject = null;
+          preview.src = url;
+        };
+
+        mediaRecorder.start();
+        console.log("🎬 録画開始");
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+
+      } catch (err) {
+        console.error("🚨 録画開始エラー:", err);
+        alert("録画を開始できませんでした。権限を確認してください。");
+      }
     };
 
     stopBtn.onclick = () => {
-      mediaRecorder.stop();
-      stopBtn.disabled = true;
-      startBtn.disabled = false;
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+        console.log("🛑 録画停止");
+        stopBtn.disabled = true;
+        startBtn.disabled = false;
+      }
     };
   </script>
 </body>
